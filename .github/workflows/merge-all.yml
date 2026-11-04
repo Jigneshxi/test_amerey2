@@ -1,0 +1,39 @@
+name: Merge All PRs
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  merge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Merge matching open PRs sequentially
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: jigneshxi/test_amerey2
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mapfile -t prs < <(
+            gh pr list --repo "$REPO" --state open --base main --limit 100 \
+              --json number,title \
+              --jq '[.[] | select(.title | test("(^|[^A-Z0-9])MOD-(00[1-9]|01[0-9]|02[0-6])([^0-9]|$)"))]
+                    | sort_by(.title)
+                    | .[].number'
+          )
+
+          if ((${#prs[@]} == 0)); then
+            echo "No matching open PRs targeting main."
+            exit 1
+          fi
+
+          echo "Merging ${#prs[@]} matching PR(s), in title order."
+          for pr in "${prs[@]}"; do
+            echo "Merging PR #$pr..."
+            gh pr merge "$pr" --repo "$REPO" --merge || true
+          done
